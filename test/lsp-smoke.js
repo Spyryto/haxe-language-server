@@ -221,12 +221,22 @@ async function main() {
   assert.equal(fs.readFileSync(path.join(tmp, "Main.hx"), "utf8"), valid,
     "Test must exercise unsaved edits only");
 }
-main().then(() => {
+async function cleanup() {
   child.kill();
-  fs.rmSync(tmp, {recursive: true, force: true});
-}).catch(error => {
+  // Windows may still hold the temporary directory until Node and the
+  // compiler child process release their handles.
+  await Promise.race([
+    new Promise(resolve => child.once("exit", resolve)),
+    sleep(2000)
+  ]);
+  try {
+    fs.rmSync(tmp, {recursive: true, force: true, maxRetries: 10, retryDelay: 100});
+  } catch (error) {
+    console.warn("Could not remove temporary test directory:", error.message);
+  }
+}
+main().then(cleanup).catch(async error => {
   console.error(error.stack || error);
-  child.kill();
-  fs.rmSync(tmp, {recursive: true, force: true});
   process.exitCode = 1;
+  await cleanup();
 });
