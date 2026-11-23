@@ -561,6 +561,9 @@ class Context {
 		cancelScheduledDiagnostics(uri);
 		scheduledDiagnostics[uri.toString()] = haxe.Timer.delay(() -> {
 			scheduledDiagnostics.remove(uri.toString());
+			// Diagnostics can repopulate the compiler cache without saving. Allow
+			// the next unsaved edit to invalidate this module again.
+			invalidated.remove(uri.toString());
 			publishDiagnostics(uri);
 		}, DiagnosticsDebounceMs);
 	}
