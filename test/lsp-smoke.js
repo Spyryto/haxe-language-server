@@ -194,7 +194,13 @@ async function main() {
   notify("textDocument/didChange", {
     textDocument: {uri, version: 5}, contentChanges: [{text: valid}]
   });
-  await waitDiagnostic(restoredAt, list => list.length === 0);
+  // Clean->clean edits need not publish an empty diagnostics notification.
+  // Give the debounce time to enqueue, then flush the compiler queue with a
+  // completion request before taking the five measured samples.
+  await sleep(450);
+  await request("textDocument/completion", {
+    textDocument: {uri}, position: completionPosition(valid)
+  });
 
   // Completion latency, measured only after the diagnostic run has settled.
   const completionTimes = [];
