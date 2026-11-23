@@ -118,6 +118,7 @@ async function main() {
     buildCompletionCache: false,
     diagnosticsForAllOpenFiles: true,
     enableDiagnostics: true,
+    diagnosticsPathFilter: ".*",
     diagnosticsOnFileOpen: true
   }}});
   notify("textDocument/didOpen", {textDocument: {uri, languageId: "haxe", version: 1, text: valid}});
