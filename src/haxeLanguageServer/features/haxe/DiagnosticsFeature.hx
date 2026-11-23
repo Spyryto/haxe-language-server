@@ -196,7 +196,7 @@ class DiagnosticsFeature {
 			if (isPathFiltered(file))
 				continue;
 
-			final uri = file.toUri();
+			final uri = context.documents.resolveOpenUri(file.toUri());
 			final argumentsMap = diagnosticsArguments[uri] = new DiagnosticsMap();
 			final doc = context.documents.getHaxe(uri);
 
