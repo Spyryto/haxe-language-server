@@ -9,4 +9,5 @@ jobs:
     - uses: actions/checkout@v2
     - run: npm ci
     - run: npx lix run vshaxe-build -t language-server -t language-server-tests
-    - run: node test/lsp-smoke.js
+    # Compiler-backed LSP integration runs in CI - Vanilla, which installs
+    # Haxe on PATH. The Lix-only build here remains a pure unit-test job.
