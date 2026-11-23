@@ -15,3 +15,9 @@ jobs:
         npm ci
         npx lix install haxelib:formatter
         npx lix run formatter -s . --check
+
+    - name: Show formatter diff on failure
+      if: failure()
+      run: |
+        npx lix run formatter -s .
+        git diff -- src
