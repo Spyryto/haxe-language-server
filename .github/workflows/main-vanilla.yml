@@ -46,3 +46,6 @@ jobs:
 
     - name: Run tests
       run: haxe test.hxml
+
+    - name: LSP integration regression and latency metrics
+      run: node test/lsp-smoke.js
