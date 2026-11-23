@@ -77,6 +77,8 @@ class Context {
 	var progressId = 0;
 
 	var invalidated = new Map<String, Bool>();
+	var scheduledDiagnostics = new Map<String, haxe.Timer>();
+	static inline final DiagnosticsDebounceMs = 400;
 
 	public function new(languageServerProtocol) {
 		this.languageServerProtocol = languageServerProtocol;
@@ -102,6 +104,7 @@ class Context {
 
 	function writeMessage(message:Message, token:Null<CancellationToken>) {
 		final method:String = Reflect.field(message, "method");
+		final requestId = (cast message : RequestMessage).id;
 		if (method == CancelNotification.type) {
 			return; // don't send cancel notifications, not supported by Haxe
 		}
@@ -129,7 +132,7 @@ class Context {
 				}
 				final message:ResponseMessage = {
 					jsonrpc: Protocol.PROTOCOL_VERSION,
-					id: @:privateAccess haxeDisplayProtocol.nextRequestId - 1, // ew..
+					id: requestId,
 					error: new ResponseError(ResponseError.InternalError, "Compiler error", [errData])
 				}
 				message;
@@ -316,6 +319,7 @@ class Context {
 
 	@:nullSafety(Off)
 	function onShutdown(_, _, resolve:NoData->Void, _) {
+		cancelAllScheduledDiagnostics();
 		haxeServer.stop();
 		return resolve(null);
 	}
@@ -382,6 +386,7 @@ class Context {
 	}
 
 	function restartServer(reason:String) {
+		cancelAllScheduledDiagnostics();
 		serverRecording.restartServer(reason, this);
 
 		if (!initialized) {
@@ -447,12 +452,17 @@ class Context {
 			invalidateFile(uri);
 			documents.onDidChangeTextDocument(event);
 			refactorCache.invalidateFile(uri.toFsPath().toString());
+			if (initialized && uri.isHaxeFile() && config.user.enableDiagnostics) {
+				diagnostics.invalidatePendingDiagnostics(uri);
+				scheduleDiagnostics(uri);
+			}
 		}
 	}
 
 	function onDidCloseTextDocument(event:DidCloseTextDocumentParams) {
 		final uri = event.textDocument.uri;
 		if (isUriSupported(uri)) {
+			cancelScheduledDiagnostics(uri);
 			documents.onDidCloseTextDocument(event);
 			diagnostics.clearDiagnostics(uri);
 		}
@@ -461,6 +471,7 @@ class Context {
 	function onDidSaveTextDocument(event:DidSaveTextDocumentParams) {
 		final uri = event.textDocument.uri;
 		if (isUriSupported(uri)) {
+			cancelScheduledDiagnostics(uri);
 			publishDiagnostics(uri);
 			invalidated.remove(uri.toString());
 			refactorCache.invalidateFile(uri.toFsPath().toString());
@@ -529,6 +540,29 @@ class Context {
 		}, error -> {
 			latestActiveFilePackage = "";
 		});
+	}
+
+	function cancelScheduledDiagnostics(uri:DocumentUri) {
+		final key = uri.toString();
+		final timer = scheduledDiagnostics[key];
+		if (timer != null) {
+			timer.stop();
+			scheduledDiagnostics.remove(key);
+		}
+	}
+
+	function cancelAllScheduledDiagnostics() {
+		for (timer in scheduledDiagnostics)
+			timer.stop();
+		scheduledDiagnostics.clear();
+	}
+
+	function scheduleDiagnostics(uri:DocumentUri) {
+		cancelScheduledDiagnostics(uri);
+		scheduledDiagnostics[uri.toString()] = haxe.Timer.delay(() -> {
+			scheduledDiagnostics.remove(uri.toString());
+			publishDiagnostics(uri);
+		}, DiagnosticsDebounceMs);
 	}
 
 	function publishDiagnostics(uri:DocumentUri) {
