@@ -41,7 +41,7 @@ class DisplayTestContext {
 
 		cacheFolder = Path.join([actionsFolder, "_cache"]);
 		final name = Path.withoutDirectory(currentFile) + ".actionTest";
-		uri = new DocumentUri("file://" + '$cacheFolder/${name}');
+		uri = new FsPath(Path.join([cacheFolder, name])).toUri();
 		doc = new HaxeDocument(uri, "haxe", 4, sources[0]);
 		result = sources[1];
 
@@ -49,7 +49,7 @@ class DisplayTestContext {
 		context.haxeServer.haxeVersion = new SemVer(4, 3, 0);
 		context.haxeServer.supportedMethods = ["display/definition"];
 		context.capabilities ??= {};
-		context.workspacePath = new DocumentUri("file://" + cacheFolder).toFsPath();
+		context.workspacePath = new FsPath(cacheFolder);
 
 		final docs = context.documents.documents;
 		docs[uri] = doc;
