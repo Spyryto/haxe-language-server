@@ -161,7 +161,7 @@ async function main() {
     textDocument: {uri, version: 4}, contentChanges: [{text: mainUsingDep}]
   });
   const missingFieldLatency = await waitDiagnostic(missingFieldAt, list =>
-    list.some(d => /second|has no field/i.test(d.message)));
+    list.some(d => /second|has no field|Missing fields for this/i.test(d.message)));
 
   const resolvedFieldAt = performance.now();
   notify("textDocument/didChange", {
@@ -175,7 +175,7 @@ async function main() {
     textDocument: {uri: depUri, version: 3}, contentChanges: [{text: depOriginal}]
   });
   const removedAgainLatency = await waitDiagnostic(removedAgainAt, list =>
-    list.some(d => /second|has no field/i.test(d.message)));
+    list.some(d => /second|has no field|Missing fields for this/i.test(d.message)));
   const fixedAgainAt = performance.now();
   notify("textDocument/didChange", {
     textDocument: {uri: depUri, version: 4}, contentChanges: [{text: depEdited}]
