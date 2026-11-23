@@ -27,7 +27,7 @@ class TextDocuments {
 			return uri;
 
 		final path = try {
-			PathHelper.normalize(new FsPath(Fs.realpathSync(uri.toFsPath()))).toString();
+			PathHelper.normalize(new FsPath(cast Fs.realpathSync(uri.toFsPath()))).toString();
 		} catch (_:Dynamic) {
 			return uri;
 		}
@@ -36,7 +36,7 @@ class TextDocuments {
 			if (!openUri.isFile())
 				continue;
 			final openPath = try {
-				PathHelper.normalize(new FsPath(Fs.realpathSync(openUri.toFsPath()))).toString();
+				PathHelper.normalize(new FsPath(cast Fs.realpathSync(openUri.toFsPath()))).toString();
 			} catch (_:Dynamic) {
 				continue;
 			}
