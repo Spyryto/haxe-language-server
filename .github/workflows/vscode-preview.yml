@@ -1,0 +1,83 @@
+name: VS Code Preview VSIX
+
+on:
+  push:
+    branches:
+      - fix/live-diagnostics-and-request-correlation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone upstream VS Code Haxe extension and its dependencies
+        run: git clone --depth 1 --recurse-submodules https://github.com/vshaxe/vshaxe.git vshaxe
+
+      - name: Use patched Language Server from this commit
+        env:
+          SERVER_REPO: ${{ github.repository }}
+          SERVER_SHA: ${{ github.sha }}
+        run: |
+          git -C vshaxe/server remote set-url origin "https://github.com/${SERVER_REPO}.git"
+          git -C vshaxe/server fetch --depth 1 origin "${SERVER_SHA}"
+          git -C vshaxe/server checkout --detach FETCH_HEAD
+          test "$(git -C vshaxe/server rev-parse HEAD)" = "${SERVER_SHA}"
+          echo "VSIX will embed Language Server commit ${SERVER_SHA}"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install extension and submodule dependencies
+        working-directory: vshaxe
+        run: npm ci
+
+      - name: Make a separately installable preview extension
+        working-directory: vshaxe
+        env:
+          PREVIEW_VERSION: ${{ github.run_number }}
+          SERVER_SHA: ${{ github.sha }}
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          pkg.name = 'vshaxe-preview';
+          pkg.publisher = 'spyryto';
+          pkg.displayName = 'Haxe (Spyryto Preview)';
+          pkg.description = 'Experimental vshaxe build with Spyryto Haxe Language Server fixes';
+          pkg.version = '0.1.' + process.env.PREVIEW_VERSION;
+          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          console.log('Extension ID: ' + pkg.publisher + '.' + pkg.name);
+          console.log('Version: ' + pkg.version);
+          console.log('Language Server: ' + process.env.SERVER_SHA);
+          NODE
+
+      - name: Build and package VSIX
+        working-directory: vshaxe
+        run: npx --yes @vscode/vsce@3 package --pre-release -o vshaxe-spyryto-preview.vsix
+
+      - name: Verify VSIX includes patched Haxe server
+        working-directory: vshaxe
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const f = path.join('bin', 'server.js');
+          if (!fs.existsSync(f) || fs.statSync(f).size < 10000) {
+            throw Error('Compiled language server is missing or unexpectedly small');
+          }
+          console.log('Language server bundle:', fs.statSync(f).size, 'bytes');
+          NODE
+          unzip -l vshaxe-spyryto-preview.vsix | grep 'extension/bin/server.js'
+          unzip -l vshaxe-spyryto-preview.vsix | grep 'extension/bin/index.js'
+
+      - name: Upload downloadable VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: vshaxe-spyryto-preview-vsix
+          path: vshaxe/vshaxe-spyryto-preview.vsix
+          if-no-files-found: error
+          retention-days: 30
