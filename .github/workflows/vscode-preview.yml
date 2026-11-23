@@ -65,13 +65,13 @@ jobs:
           node - <<'NODE'
           const fs = require('node:fs');
           const path = require('node:path');
-          const f = path.join('bin', 'server.js');
+          const f = path.join('server', 'bin', 'server.js');
           if (!fs.existsSync(f) || fs.statSync(f).size < 10000) {
             throw Error('Compiled language server is missing or unexpectedly small');
           }
           console.log('Language server bundle:', fs.statSync(f).size, 'bytes');
           NODE
-          unzip -l vshaxe-spyryto-preview.vsix | grep 'extension/bin/server.js'
+          unzip -l vshaxe-spyryto-preview.vsix | grep 'extension/server/bin/server.js'
           unzip -l vshaxe-spyryto-preview.vsix | grep 'extension/bin/index.js'
 
       - name: Upload downloadable VSIX
