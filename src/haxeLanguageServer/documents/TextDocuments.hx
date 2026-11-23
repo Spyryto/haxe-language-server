@@ -39,8 +39,19 @@ class TextDocuments {
 			} catch (_:Dynamic) {
 				continue;
 			}
-			if (path == openPath)
+			if (path == openPath || (Sys.systemName() == "Windows" && path.toLowerCase() == openPath.toLowerCase()))
 				return openUri;
+
+			// Windows runners can refer to the same file via an 8.3 short
+			// directory name (RUNNER~1) and its long counterpart (runneradmin).
+			// realpathSync does not always expand these aliases. Compare file
+			// identity instead of filenames before falling back to on-disk text.
+			try {
+				final original = js.node.Fs.statSync(cast uri.toFsPath());
+				final opened = js.node.Fs.statSync(cast openUri.toFsPath());
+				if (original.ino != 0 && original.ino == opened.ino && original.dev == opened.dev)
+					return openUri;
+			} catch (_:Dynamic) {}
 		}
 		return uri;
 	}
