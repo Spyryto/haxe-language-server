@@ -1,15 +1,13 @@
 name: CI - Vanilla
 
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
   build:
     strategy:
       fail-fast: false
       matrix:
-        # TODO: fix tests on windows and enable again
-        # os: [ubuntu-latest, macos-latest, windows-latest]
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         haxe: [latest, "2026-03-04_development_033a9fd"]
     runs-on: ${{ matrix.os }}
     steps:
@@ -46,3 +44,6 @@ jobs:
 
     - name: Run tests
       run: haxe test.hxml
+
+    - name: LSP integration regression and latency metrics
+      run: node test/lsp-smoke.js

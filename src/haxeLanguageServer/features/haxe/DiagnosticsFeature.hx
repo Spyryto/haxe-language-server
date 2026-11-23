@@ -196,7 +196,7 @@ class DiagnosticsFeature {
 			if (isPathFiltered(file))
 				continue;
 
-			final uri = file.toUri();
+			final uri = context.documents.resolveOpenUri(file.toUri());
 			final argumentsMap = diagnosticsArguments[uri] = new DiagnosticsMap();
 			final doc = context.documents.getHaxe(uri);
 
@@ -307,6 +307,10 @@ class DiagnosticsFeature {
 		return buf.toString();
 	}
 
+	public function invalidatePendingDiagnostics(uri:DocumentUri) {
+		cancelPendingRequest(uri);
+	}
+
 	public function clearDiagnostics(uri:DocumentUri) {
 		cancelPendingRequest(uri);
 		clearDiagnosticsOnClient(uri);
@@ -328,12 +332,13 @@ class DiagnosticsFeature {
 		// we delay the actual request because in some cases `clearDiagnostics` will be called right away,
 		// and since diagnostics call is rather expensive, we don't want to make redundant invokations
 		// one scenario where this happens is vscode document preview, see https://github.com/microsoft/vscode/issues/78453
-		var immediate = setImmediate(invokePendingRequest, uri, tokenSource.token);
+		var immediate = setImmediate(invokePendingRequest, uri, tokenSource);
 		tokenSource.token.setCallback(clearImmediate.bind(immediate)); // will be re-set by callDisplay later
 		pendingRequests[uri] = tokenSource;
 	}
 
-	function invokePendingRequest(uri:DocumentUri, token:CancellationToken) {
+	function invokePendingRequest(uri:DocumentUri, tokenSource:CancellationTokenSource) {
+		final token = tokenSource.token;
 		final doc:Null<HaxeDocument> = context.documents.getHaxe(uri);
 
 		if (doc != null) {
@@ -345,23 +350,32 @@ class DiagnosticsFeature {
 					context.documents.iter(function(doc) {
 						final path = doc.uri.toFsPath();
 						if (doc.languageId == "haxe" && !isPathFiltered(path)) {
-							params.fileContents.sure().push({file: path, contents: null});
+							params.fileContents.sure().push({file: path, contents: doc.content});
 						}
 					});
 				} else {
 					params.file = doc.uri.toFsPath();
+					params.contents = doc.content;
 				}
 
 				context.callHaxeMethod(DisplayMethods.Diagnostics, params, token, result -> {
+					if (pendingRequests[uri] != tokenSource)
+						return null; // A newer edit/request superseded this response.
 					pendingRequests.remove(uri);
-					processDiagnosticsReply(uri, onResolve, result);
+					// This request covers *all* open files, so clear diagnostics for files
+					// absent from the response as well (not only the initiating file).
+					processDiagnosticsReply(context.config.user.diagnosticsForAllOpenFiles ? null : uri, onResolve, result);
 					return null;
 				}, error -> {
+					if (pendingRequests[uri] != tokenSource)
+						return;
 					pendingRequests.remove(uri);
 					processErrorReply(uri, error);
 				});
 			} else {
-				context.callDisplay("@diagnostics", [doc.uri.toFsPath() + "@0@diagnostics"], null, token, result -> {
+				context.callDisplay("@diagnostics", [doc.uri.toFsPath() + "@0@diagnostics"], doc.content, token, result -> {
+					if (pendingRequests[uri] != tokenSource)
+						return;
 					pendingRequests.remove(uri);
 					final data = parseLegacyDiagnostics(result);
 					if (data == null) {
@@ -370,6 +384,8 @@ class DiagnosticsFeature {
 						processDiagnosticsReply(null, onResolve, data);
 					}
 				}, error -> {
+					if (pendingRequests[uri] != tokenSource)
+						return;
 					pendingRequests.remove(uri);
 					processErrorReply(uri, error);
 				});

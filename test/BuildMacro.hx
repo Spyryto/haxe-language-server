@@ -17,6 +17,9 @@ class BuildMacro {
 				continue;
 			}
 			var doc = addPackageToDoc(c, field, field.doc);
+			// Windows checkout/source comments may contain CRLF. Normalize before
+			// splitting the fixture's "before --- after" delimiter.
+			doc = StringTools.replace(doc, "\r\n", "\n");
 			doc = StringTools.replace(doc, "**\\/", "**/");
 			var transform = Marker.extractMarkers(doc);
 			var markers = transform.markers.length > 0 ? macro $a{transform.markers} : macro new Map();

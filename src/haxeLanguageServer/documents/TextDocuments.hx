@@ -1,5 +1,7 @@
 package haxeLanguageServer.documents;
 
+import haxeLanguageServer.helper.PathHelper;
+
 @:allow(haxeLanguageServer.Context)
 class TextDocuments {
 	public static inline final syncKind = TextDocumentSyncKind.Incremental;
@@ -10,6 +12,48 @@ class TextDocuments {
 
 	public inline function iterator():Iterator<HxTextDocument> {
 		return documents.iterator();
+	}
+
+	/**
+		Resolve compiler paths to the URI originally opened by the editor.
+		On macOS, for example, Haxe can return /private/var/... while the
+		client opened file:///var/... (a symlink to the same directory).
+		Publishing compiler-generated URIs would create phantom diagnostics,
+		and loading their source from disk would ignore unsaved edits.
+	**/
+	public function resolveOpenUri(uri:DocumentUri):DocumentUri {
+		if (documents.exists(uri) || !uri.isFile())
+			return uri;
+
+		final path = try {
+			PathHelper.normalize(new FsPath(cast js.node.Fs.realpathSync(cast uri.toFsPath()))).toString();
+		} catch (_:Dynamic) {
+			return uri;
+		}
+
+		for (openUri in documents.keys()) {
+			if (!openUri.isFile())
+				continue;
+			final openPath = try {
+				PathHelper.normalize(new FsPath(cast js.node.Fs.realpathSync(cast openUri.toFsPath()))).toString();
+			} catch (_:Dynamic) {
+				continue;
+			}
+			if (path == openPath || (Sys.systemName() == "Windows" && path.toLowerCase() == openPath.toLowerCase()))
+				return openUri;
+
+			// Windows runners can refer to the same file via an 8.3 short
+			// directory name (RUNNER~1) and its long counterpart (runneradmin).
+			// realpathSync does not always expand these aliases. Compare file
+			// identity instead of filenames before falling back to on-disk text.
+			try {
+				final original = js.node.Fs.statSync(cast uri.toFsPath());
+				final opened = js.node.Fs.statSync(cast openUri.toFsPath());
+				if (original.ino != 0 && original.ino == opened.ino && original.dev == opened.dev)
+					return openUri;
+			} catch (_:Dynamic) {}
+		}
+		return uri;
 	}
 
 	public inline function getHaxe(uri:DocumentUri):Null<HaxeDocument> {
