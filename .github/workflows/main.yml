@@ -9,3 +9,4 @@ jobs:
     - uses: actions/checkout@v2
     - run: npm ci
     - run: npx lix run vshaxe-build -t language-server -t language-server-tests
+    - run: node test/lsp-smoke.js
