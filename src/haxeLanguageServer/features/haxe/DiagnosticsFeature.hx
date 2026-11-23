@@ -362,7 +362,9 @@ class DiagnosticsFeature {
 					if (pendingRequests[uri] != tokenSource)
 						return null; // A newer edit/request superseded this response.
 					pendingRequests.remove(uri);
-					processDiagnosticsReply(uri, onResolve, result);
+					// This request covers *all* open files, so clear diagnostics for files
+					// absent from the response as well (not only the initiating file).
+					processDiagnosticsReply(context.config.user.diagnosticsForAllOpenFiles ? null : uri, onResolve, result);
 					return null;
 				}, error -> {
 					if (pendingRequests[uri] != tokenSource)
