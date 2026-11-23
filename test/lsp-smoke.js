@@ -168,6 +168,20 @@ async function main() {
     textDocument: {uri: depUri, version: 2}, contentChanges: [{text: depEdited}]
   });
   const resolvedFieldLatency = await waitDiagnostic(resolvedFieldAt, list => list.length === 0);
+  // Repeated unsaved edits must keep invalidating compiler cache after
+  // a diagnostics request has repopulated it.
+  const removedAgainAt = performance.now();
+  notify("textDocument/didChange", {
+    textDocument: {uri: depUri, version: 3}, contentChanges: [{text: depOriginal}]
+  });
+  const removedAgainLatency = await waitDiagnostic(removedAgainAt, list =>
+    list.some(d => /second|has no field/i.test(d.message)));
+  const fixedAgainAt = performance.now();
+  notify("textDocument/didChange", {
+    textDocument: {uri: depUri, version: 4}, contentChanges: [{text: depEdited}]
+  });
+  const fixedAgainLatency = await waitDiagnostic(fixedAgainAt, list => list.length === 0);
+
   // Restore the first file before testing completion.
   const restoredAt = performance.now();
   notify("textDocument/didChange", {
@@ -187,6 +201,8 @@ async function main() {
   console.log("METRIC diagnostics clear: " + Math.round(clearLatency) + " ms");
   console.log("METRIC dependent missing-field diagnostic: " + Math.round(missingFieldLatency) + " ms");
   console.log("METRIC dependent field resolved without saving: " + Math.round(resolvedFieldLatency) + " ms");
+  console.log("METRIC second unsaved dependent field removal: " + Math.round(removedAgainLatency) + " ms");
+  console.log("METRIC second unsaved dependent field restore: " + Math.round(fixedAgainLatency) + " ms");
   console.log("METRIC completion p50: " + sorted[2] + " ms (samples: " + completionTimes.join(", ") + ")");
   for (const method of ["display/completion", "display/diagnostics"]) {
     const samples = haxeMethodTimings.filter(t => t.method === method)
