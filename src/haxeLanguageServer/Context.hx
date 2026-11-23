@@ -104,17 +104,17 @@ class Context {
 
 	function writeMessage(message:Message, token:Null<CancellationToken>) {
 		final method:String = Reflect.field(message, "method");
-		final requestId = (cast message : RequestMessage).id;
 		if (method == CancelNotification.type) {
 			return; // don't send cancel notifications, not supported by Haxe
 		}
+		final requestId = (cast message : RequestMessage).id;
 		final includeDisplayArguments = method.startsWith("display/") || method == ServerMethods.ReadClassPaths;
 		callDisplay(method, [Json.stringify(message)], null, token, function(result:DisplayResult) {
 			switch result {
 				case DResult("") if (method == DisplayMethods.Diagnostics):
 					haxeDisplayProtocol.handleMessage(({
 						jsonrpc: Protocol.PROTOCOL_VERSION,
-						id: (cast message : RequestMessage).id,
+						id: requestId,
 						result: {result: []}
 					} : ResponseMessage));
 				case DResult(msg):
