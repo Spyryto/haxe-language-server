@@ -78,6 +78,7 @@ class Context {
 
 	var invalidated = new Map<String, Bool>();
 	var scheduledDiagnostics = new Map<String, haxe.Timer>();
+
 	static inline final DiagnosticsDebounceMs = 400;
 
 	public function new(languageServerProtocol) {
