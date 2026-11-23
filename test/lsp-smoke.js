@@ -25,6 +25,7 @@ const child = spawn(process.execPath, [processPath], {cwd: tmp, stdio: ["pipe", 
 let input = Buffer.alloc(0), id = 0, stderr = "";
 const pending = new Map();
 const diagnostics = [];
+const haxeMethodTimings = [];
 child.stderr.on("data", chunk => stderr += chunk.toString());
 child.on("exit", code => {
   for (const entry of pending.values()) entry.reject(Error("Server exited: " + code + "\n" + stderr));
@@ -56,6 +57,10 @@ function receive(message) {
     send({id: message.id, result: null});
   } else if (message.method === "textDocument/publishDiagnostics") {
     diagnostics.push({at: performance.now(), params: message.params});
+  } else if (message.method === "haxe/didRunHaxeMethod") {
+    if (message.params.additionalTimes) haxeMethodTimings.push({
+      method: message.params.method, ...message.params.additionalTimes
+    });
   } else if (message.id != null) {
     const entry = pending.get(message.id);
     if (entry) {
@@ -105,7 +110,7 @@ async function main() {
       displayArguments: ["-cp", tmp, "-main", "Main", "-js", path.join(tmp, "unused.js")],
       displayServerConfig: {path: "haxe", env: {}, arguments: [], print: {completion: false, reusing: false}, useSocket: true},
       haxelibConfig: {executable: "haxelib"},
-      sendMethodResults: false
+      sendMethodResults: true
     }
   });
   notify("initialized", {});
@@ -183,6 +188,12 @@ async function main() {
   console.log("METRIC dependent missing-field diagnostic: " + Math.round(missingFieldLatency) + " ms");
   console.log("METRIC dependent field resolved without saving: " + Math.round(resolvedFieldLatency) + " ms");
   console.log("METRIC completion p50: " + sorted[2] + " ms (samples: " + completionTimes.join(", ") + ")");
+  for (const method of ["display/completion", "display/diagnostics"]) {
+    const samples = haxeMethodTimings.filter(t => t.method === method)
+      .map(t => Math.round(t.arrival - t.beforeCall)).sort((a, b) => a - b);
+    if (samples.length) console.log("METRIC " + method + " server round-trip p50: " +
+      samples[Math.floor(samples.length / 2)] + " ms (" + samples.length + " samples)");
+  }
   assert.equal(fs.readFileSync(path.join(tmp, "Main.hx"), "utf8"), valid,
     "Test must exercise unsaved edits only");
 }
