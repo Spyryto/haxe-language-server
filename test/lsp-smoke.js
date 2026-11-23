@@ -14,7 +14,11 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "haxe-lsp-regression-"));
 const uri = pathToFileURL(path.join(tmp, "Main.hx")).href;
 const valid = "class Main {\n\tstatic function main() {\n\t\tvar value = Math.abs(-1);\n\t}\n}\n";
 const invalid = valid.replace("Math.abs(-1)", "MissingType");
+const depUri = pathToFileURL(path.join(tmp, "Dep.hx")).href;
+const depOriginal = "class Dep { public static function first():Int return 1; }\n";
+const depEdited = depOriginal.replace("first", "second");
 fs.writeFileSync(path.join(tmp, "Main.hx"), valid);
+fs.writeFileSync(path.join(tmp, "Dep.hx"), depOriginal);
 
 const processPath = path.join(__dirname, "..", "bin", "server.js");
 const child = spawn(process.execPath, [processPath], {cwd: tmp, stdio: ["pipe", "pipe", "pipe"]});
@@ -141,6 +145,31 @@ async function main() {
   });
   const clearLatency = await waitDiagnostic(validAt, list => list.length === 0);
 
+  // Two-file regression: a missing field becomes available in a second unsaved
+  // document. No stale 'has no field' error may remain on the first document.
+  notify("textDocument/didOpen", {
+    textDocument: {uri: depUri, languageId: "haxe", version: 1, text: depOriginal}
+  });
+  const mainUsingDep = valid.replace("Math.abs(-1)", "Dep.second()");
+  const missingFieldAt = performance.now();
+  notify("textDocument/didChange", {
+    textDocument: {uri, version: 4}, contentChanges: [{text: mainUsingDep}]
+  });
+  const missingFieldLatency = await waitDiagnostic(missingFieldAt, list =>
+    list.some(d => /second|has no field/i.test(d.message)));
+
+  const resolvedFieldAt = performance.now();
+  notify("textDocument/didChange", {
+    textDocument: {uri: depUri, version: 2}, contentChanges: [{text: depEdited}]
+  });
+  const resolvedFieldLatency = await waitDiagnostic(resolvedFieldAt, list => list.length === 0);
+  // Restore the first file before testing completion.
+  const restoredAt = performance.now();
+  notify("textDocument/didChange", {
+    textDocument: {uri, version: 5}, contentChanges: [{text: valid}]
+  });
+  await waitDiagnostic(restoredAt, list => list.length === 0);
+
   // Completion latency, measured only after the diagnostic run has settled.
   const completionTimes = [];
   for (let i = 0; i < 5; i++) {
@@ -151,6 +180,8 @@ async function main() {
   const sorted = completionTimes.slice().sort((a, b) => a - b);
   console.log("METRIC unsaved-edit diagnostics: " + Math.round(invalidLatency) + " ms");
   console.log("METRIC diagnostics clear: " + Math.round(clearLatency) + " ms");
+  console.log("METRIC dependent missing-field diagnostic: " + Math.round(missingFieldLatency) + " ms");
+  console.log("METRIC dependent field resolved without saving: " + Math.round(resolvedFieldLatency) + " ms");
   console.log("METRIC completion p50: " + sorted[2] + " ms (samples: " + completionTimes.join(", ") + ")");
   assert.equal(fs.readFileSync(path.join(tmp, "Main.hx"), "utf8"), valid,
     "Test must exercise unsaved edits only");
