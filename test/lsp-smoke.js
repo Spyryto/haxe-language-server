@@ -12,7 +12,7 @@ const {performance} = require("node:perf_hooks");
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "haxe-lsp-regression-"));
 const uri = pathToFileURL(path.join(tmp, "Main.hx")).href;
-const valid = "class Main {\n\tstatic function main() {\n\t\tvar value = Math.abs(-1);\n\t}\n}\n";
+const valid = "class Main {\n\tstatic function main() {\n\t\tvar value = Math.abs(-1);\n\t\ttrace(value);\n\t}\n}\n";
 const invalid = valid.replace("Math.abs(-1)", "MissingType");
 const depUri = pathToFileURL(path.join(tmp, "Dep.hx")).href;
 const depOriginal = "class Dep { public static function first():Int return 1; }\n";
